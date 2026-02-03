@@ -1,6 +1,12 @@
 ---
 name: gastown
 description: Multi-agent coding orchestrator using Gas Town (gt) and Claude Code. Use for ANY non-trivial coding task — multi-file changes, new features, refactors, bug fixes, anything involving code that needs to compile/run/test. Delegates work to parallel Claude Code agents (polecats) with git-backed persistent state, work tracking (beads), and coordination. Use when a task involves more than a single file edit or quick script.
+metadata:
+  openclaw:
+    emoji: "🏭"
+    requires:
+      allBins: ["tmux", "claude"]
+    setup: "scripts/setup.sh"
 ---
 
 # Gastown — Multi-Agent Coding Orchestrator

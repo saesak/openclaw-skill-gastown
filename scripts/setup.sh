@@ -1,5 +1,5 @@
 #!/bin/bash
-# Gastown Setup — installs Go, gt, bd, and verifies prerequisites
+# Gastown Setup — installs Go, gt, bd, creates workspace, and verifies everything
 set -e
 
 echo "🏭 Gastown Setup"
@@ -37,7 +37,6 @@ if ! command -v go &>/dev/null; then
     tar -C "$HOME/local" -xzf /tmp/go.tar.gz
     rm /tmp/go.tar.gz
     
-    # Add to PATH
     export PATH="$PATH:$HOME/local/go/bin:$HOME/go/bin"
     if ! grep -q 'local/go/bin' "$HOME/.bashrc" 2>/dev/null; then
         echo 'export PATH=$PATH:$HOME/local/go/bin:$HOME/go/bin' >> "$HOME/.bashrc"
@@ -66,11 +65,24 @@ else
     echo "✅ bd $(bd version 2>&1)"
 fi
 
+# Create workspace if needed
+if [ ! -d "$HOME/gt" ]; then
+    echo ""
+    echo "📦 Creating Gastown workspace..."
+    gt install "$HOME/gt" --git
+    echo "✅ Workspace created at ~/gt"
+else
+    echo "✅ Workspace exists at ~/gt"
+fi
+
 echo ""
 echo "🎸 Gastown is ready!"
 echo ""
 echo "Next steps:"
-echo "  gt install ~/gt --git          # Create workspace"
 echo "  cd ~/gt"
-echo "  gt rig add <name> <repo>       # Add a project"
-echo "  gt mayor attach                # Start the Mayor"
+echo "  gt rig add <name> <repo-or-path> --branch main"
+echo "  cd ~/gt/<name>/.beads && ln -s ../../.beads/formulas formulas"
+echo "  gt doctor --fix"
+echo "  gt up"
+echo "  gt mail send mayor -s 'Task' -m 'Description'"
+echo "  gt nudge mayor 'Check inbox'"
