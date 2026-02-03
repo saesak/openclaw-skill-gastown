@@ -1,87 +1,165 @@
-# Gastown Architecture
+# Gas Town Architecture
 
-## Components
+## Overview
 
-### Mayor 🎩
-Primary AI coordinator — **your main interface to Gastown**. A Claude Code instance with full context about workspace, projects, and agents. Handles:
-- Breaking tasks into beads
-- Creating convoys for tracking
-- Slinging beads to polecats with proper formulas
-- Monitoring progress and handling coordination
-- Rig bootstrapping and formula resolution
+Gas Town is a workspace manager that coordinates multiple Claude Code agents working on different tasks. Instead of losing context when agents restart, Gas Town persists work state in git-backed hooks, enabling reliable multi-agent workflows.
 
-Start interactive session with `gt mayor attach`. Send async messages with `gt mayor mail "..."`.
+## Problem & Solution
 
-### Town 🏘️
-Workspace directory (`~/gt/`). Contains all projects, agents, and configuration.
+| Challenge | Gas Town Solution |
+|-----------|-------------------|
+| Agents lose context on restart | Work persists in git-backed hooks |
+| Manual agent coordination | Built-in mailboxes, identities, and handoffs |
+| 4-10 agents become chaotic | Scale comfortably to 20-30 agents |
+| Work state lost in agent memory | Work state stored in Beads ledger |
 
-### Rigs 🏗️
-Project containers. Each rig wraps a git repository and manages its associated agents. Add with `gt rig add <name> <repo>`.
+## Component Overview
+
+```
+         ┌─────────────────────────────────────────────────────┐
+         │                    TOWN (~/gt/)                     │
+         │                                                     │
+         │   ┌─────────┐    ┌─────────┐    ┌─────────┐        │
+         │   │  Mayor  │    │ Deacon  │    │  Boot   │        │
+         │   │   🦊    │    │   ⚙️    │    │         │        │
+         │   └────┬────┘    └────┬────┘    └────┬────┘        │
+         │        │              │              │              │
+         │        └──────────────┼──────────────┘              │
+         │                       │                             │
+         │   ┌───────────────────┼───────────────────┐        │
+         │   │              RIG (vtuber/)             │        │
+         │   │                   │                    │        │
+         │   │   ┌───────────────┼───────────────┐   │        │
+         │   │   │               │               │   │        │
+         │   │   ▼               ▼               ▼   │        │
+         │   │ Witness 🦅    Refinery 🦡    Polecats │        │
+         │   │                               🦨🦨🦨   │        │
+         │   │                                       │        │
+         │   │   ┌─────────────────────────────┐    │        │
+         │   │   │         .beads/             │    │        │
+         │   │   │   formulas/ → ../../.beads/ │    │        │
+         │   │   │   issues.jsonl              │    │        │
+         │   │   └─────────────────────────────┘    │        │
+         │   └───────────────────────────────────────┘        │
+         └─────────────────────────────────────────────────────┘
+```
+
+## Agents
+
+### Mayor 🦊
+Primary AI coordinator. A Claude Code instance with full context about workspace, projects, and agents.
+- Dispatches work, coordinates across rigs
+- Creates convoys, slings beads to polecats
+- **Must send SWARM_START** when dispatching batches for completion tracking
+
+### Witness 🦅
+Per-rig worker monitor.
+- Watches polecats for stuck/completed state
+- Runs patrol cycles checking worker health
+- Sends SWARM_COMPLETE to Mayor when batch finishes
+- Escalates issues to Mayor
+
+### Refinery 🦡
+Merge queue processor.
+- Processes polecat branches from merge queue
+- Merges to main after review
+- Closes beads after successful merge
+- Handles conflict resolution
 
 ### Polecats 🦨
-Ephemeral worker agents. Spawned by Mayor via `gt sling`, they follow the `mol-polecat-work` lifecycle:
-1. Load context and verify assignment
-2. Set up working branch
-3. Verify preflight tests pass
-4. Implement the solution
-5. Self-review changes
-6. Run tests and verify coverage
-7. Clean up workspace
-8. Prepare work for review
-9. Submit to merge queue and self-destruct
+Ephemeral worker agents.
+- Spawned by Mayor via `gt sling`
+- Follow `mol-polecat-work` lifecycle (9 steps)
+- Self-destruct after submitting to merge queue
+- Work on feature branches, never main directly
 
-Each gets:
-- Own git branch (`polecat/<name>/<bead>@<hash>`)
-- Own tmux session (`gt-<rig>-<name>`)
-- Access to the rig's codebase
-- Mail-based communication with other agents
+### Deacon ⚙️
+Infrastructure daemon.
+- Background patrol loop
+- Health checks, session monitoring
+- Nudges agents periodically
 
-**Self-cleaning:** Polecats push work, submit to MQ, nuke themselves, and exit. No idle state.
+### Dogs 🐕
+Cross-rig infrastructure workers.
+- Diagnostics and health checks
+- Recovery operations
 
-### Formulas 📜
-Workflow templates that define step-by-step lifecycles. Key formulas:
-- `mol-polecat-work` — Standard polecat work lifecycle (9 steps)
-- `shiny` — "Engineer in a Box" design-first workflow
-- `mol-polecat-code-review` — Code review workflow
-- `mol-witness-patrol` — Witness monitoring loop
-- `mol-refinery-patrol` — Merge queue processing loop
+## Work Flow
 
-Formulas are applied automatically when slinging through Mayor. Bypassing them (via `--hook-raw-bead`) skips the structured lifecycle.
+```
+1. You describe work to Mayor
+         │
+         ▼
+2. Mayor creates beads + convoy
+         │
+         ▼
+3. Mayor slings beads to polecats
+   ├── Sends SWARM_START to Witness
+   └── Polecats get mol-polecat-work formula
+         │
+         ▼
+4. Polecats execute 9-step lifecycle
+   ├── Branch setup
+   ├── Implement
+   ├── Self-review
+   ├── Tests
+   └── Submit to merge queue
+         │
+         ▼
+5. Refinery merges branches to main
+         │
+         ▼
+6. Witness detects completion
+   └── Sends SWARM_COMPLETE to Mayor
+         │
+         ▼
+7. Mayor dispatches dependent work
+```
+
+## Key Mechanisms
 
 ### Hooks 🪝
-Git worktree-based persistent storage. Work state survives crashes and restarts. When a bead is slung, it's "hooked" — attached to a polecat's worktree.
+Git worktree-based persistent storage.
+- Each agent has a hook where work lands
+- Survives crashes and restarts
+- **GUPP**: If there's work on your hook, you RUN IT
+
+### Formulas 📜
+Workflow templates (TOML files).
+- `mol-polecat-work` — Standard 9-step polecat lifecycle
+- `mol-witness-patrol` — Witness monitoring loop
+- `mol-refinery-patrol` — Merge queue processing
+
+**Critical**: Rigs need formulas symlinked from town level:
+```bash
+cd ~/gt/<rig>/.beads && ln -s ../../.beads/formulas formulas
+```
 
 ### Convoys 🚚
-Work tracking bundles. Group multiple beads for coordinated delivery. Auto-close when all tracked beads complete. Create with `gt convoy create`.
+Work tracking bundles.
+- Group related beads together
+- Track progress across multiple polecats
+- Auto-close when all beads complete
 
-### Beads 📿
-Git-backed issue tracking. Bead IDs use prefix + 5-char alphanumeric (e.g., `vt-abc12`). The prefix indicates the rig. Create with `bd create`.
+### Mail System 📬
+Inter-agent communication.
+- `gt mail send <target> -s "subject" -m "message"`
+- `gt mail inbox` to check messages
+- Special messages: SWARM_START, SWARM_COMPLETE, POLECAT_DONE, MERGED
 
-### Refinery 🏭
-Merge queue processor. Handles merging polecat branches back to main. Runs as a persistent agent. You never push to main directly — Refinery handles it.
+## The Propulsion Principle (GUPP)
 
-### Witness 🦉
-Monitoring agent. Watches polecat lifecycles, catches stuck/crashed workers, and reports issues to Mayor.
+**Gas Town Universal Propulsion Principle:**
+> If your hook has work, RUN IT.
 
-## Data Flow
+No waiting. No asking. Work lands on hook → work runs.
 
-```
-You → Mayor → creates Convoy with Beads
-                  → slings Beads to Polecats (with mol-polecat-work formula)
-                      → Polecats work on branches (9-step lifecycle)
-                      → Polecats commit + submit to merge queue + self-destruct
-                  → Refinery merges branches to main
-              → Convoy auto-closes when all beads done
-          → Mayor reports results
-```
+Molecules (work units) survive crashes. Any worker can continue where another left off. The engine never stops as long as there's fuel.
 
 ## Scaling
 
-Gastown comfortably scales to 20-30 concurrent agents. Each polecat is an independent Claude Code process with its own context, so they don't interfere with each other. The git-backed state means work persists even if agents crash.
-
-## Common Mistakes
-
-1. **Bypassing Mayor** — Manually creating beads and slinging them skips formula application, convoy tracking, and coordination. Always go through Mayor.
-2. **Using `--hook-raw-bead`** — This skips the `mol-polecat-work` lifecycle. Polecats won't follow the 9-step process and may not self-clean properly.
-3. **Pushing to main** — Only Refinery pushes to main via the merge queue. Polecats work on their own branches.
-4. **Closing beads manually** — Refinery closes beads after successful merge.
+Gas Town comfortably scales to 20-30 concurrent agents:
+- Each polecat is independent Claude Code process
+- Git-backed state means work persists if agents crash
+- Witness monitors all polecats in a rig
+- Mayor coordinates across rigs
