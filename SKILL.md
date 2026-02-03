@@ -131,7 +131,7 @@ See `references/architecture.md` for full details on Mayor, Rigs, Polecats, Hook
 ## Troubleshooting
 
 - **Polecat not following lifecycle**: Was it slung with `--hook-raw-bead`? That skips formula application. Re-sling through Mayor.
-- **Formula not resolving**: Mayor may not have finished rig bootstrap. Wait for Mayor boot to complete, or run `gt formula list` to verify formulas exist.
+- **Formula not resolving (`mol-polecat-work` not found)**: Rigs need access to formulas. Symlink the global formulas into the rig: `cd ~/gt/<rig>/.beads && ln -s ../../.beads/formulas formulas`. Verify with `cd ~/gt/<rig> && bd cook mol-polecat-work --dry-run`.
 - **ICU build error on beads install**: Use `CGO_ENABLED=0 go install ...`
 - **Polecat not showing in `gt agents list`**: Check tmux: `tmux list-sessions | grep gt-`
 - **Need Go but no sudo**: Install to `~/local/go/` instead of `/usr/local/`
