@@ -37,70 +37,102 @@ cd ~/gt
 gt rig add <name> <git-repo-or-local-path> --branch main
 ```
 
-## Core Workflow
+## Core Workflow — Work Through the Mayor
 
-### 1. Create work items (beads)
+**The Mayor is your primary interface.** Don't manually create beads and sling them — the Mayor handles formula resolution, rig bootstrapping, convoy coordination, and merge queue orchestration.
+
+### 1. Tell the Mayor what you need
 
 ```bash
 export PATH=$PATH:$HOME/local/go/bin:$HOME/go/bin
 cd ~/gt
-bd create --title "Description of task" --prefix <rig-prefix>
+
+# Interactive session (best for complex tasks)
+gt mayor attach
+# Then describe the task in natural language.
+# Mayor creates beads, convoys, assigns polecats, tracks progress.
+
+# Non-interactive (fire and forget)
+gt mayor mail "Refactor the voice pipeline into a reusable library"
 ```
 
-### 2. Create a convoy (groups related beads)
+The Mayor will:
+- Break the task into beads (work items)
+- Create a convoy to track them
+- Sling beads to polecats with the proper `mol-polecat-work` formula
+- Monitor progress and handle coordination
+
+### 2. Monitor progress
 
 ```bash
-gt convoy create "Feature Name" <bead-id-1> <bead-id-2> --notify
-```
-
-### 3. Sling work to agents
-
-```bash
-gt sling <bead-id> <rig-name> --hook-raw-bead
-```
-
-Each sling spawns a **polecat** — an ephemeral Claude Code agent in a tmux session that reads the bead, does the work, commits, and reports.
-
-### 4. Monitor progress
-
-```bash
-# List convoys
+# List convoys (work bundles)
 gt convoy list
 
-# Check polecat tmux sessions
-tmux list-sessions | grep gt-
+# Check convoy detail
+gt convoy status <convoy-id>
 
-# Read a polecat's current output
+# List all agents (including polecats)
+gt agents list --all
+
+# Peek at a polecat's current output
 tmux capture-pane -t gt-<rig>-<polecat-name> -p | tail -30
 
-# List all running agents
-gt agents list
+# List tmux sessions
+tmux list-sessions | grep gt-
+
+# Check bead status
+bd show <bead-id>
 ```
 
-### 5. Review results
+### 3. Results
 
-Polecats commit to their own branches (`polecat/<name>/<bead>@<hash>`). The refinery agent handles merging.
+Polecats follow the `mol-polecat-work` lifecycle:
+1. **load-context** — Read the bead, understand the task
+2. **branch-setup** — Create a working branch
+3. **preflight-tests** — Verify tests pass on main
+4. **implement** — Do the actual work
+5. **self-review** — Review own changes
+6. **run-tests** — Run tests, verify coverage
+7. **cleanup-workspace** — Clean up
+8. **prepare-for-review** — Prepare for merge
+9. **submit-and-exit** — Push to merge queue, self-destruct
+
+The **Refinery** agent merges polecat branches back to main. You never push directly.
+
+## Anti-Patterns (Don't Do This)
+
+| ❌ Don't | ✅ Do Instead |
+|---|---|
+| `bd create` + `gt sling` manually | Tell Mayor via `gt mayor attach` or `gt mayor mail` |
+| `gt sling --hook-raw-bead` | Let Mayor apply `mol-polecat-work` formula automatically |
+| Push to main directly | Let Refinery merge from the merge queue |
+| Close beads manually | Polecats self-clean; Refinery closes after merge |
+| Create polecats without Mayor | Mayor handles spawning and assignment |
+
+**`--hook-raw-bead` bypasses the 9-step lifecycle.** Only use it if Mayor is actually down and you need emergency manual control.
 
 ## Quick Reference
 
 | Action | Command |
 |---|---|
-| Create bead | `bd create --title "..." --prefix <pfx>` |
-| Create convoy | `gt convoy create "name" <beads...> --notify` |
-| Sling to agent | `gt sling <bead> <rig> --hook-raw-bead` |
+| Talk to Mayor (interactive) | `gt mayor attach` |
+| Message Mayor | `gt mayor mail "task description"` |
 | List convoys | `gt convoy list` |
 | Convoy detail | `gt convoy status <id>` |
-| List agents | `gt agents list` |
+| List agents | `gt agents list --all` |
 | Peek at polecat | `tmux capture-pane -t gt-<rig>-<name> -p \| tail -30` |
 | List tmux sessions | `tmux list-sessions \| grep gt-` |
+| Check bead status | `bd show <bead-id>` |
 
 ## Architecture
 
-See `references/architecture.md` for full details on Mayor, Rigs, Polecats, Hooks, Convoys, and Beads.
+See `references/architecture.md` for full details on Mayor, Rigs, Polecats, Hooks, Convoys, Beads, Refinery, and Witness.
 
 ## Troubleshooting
 
-- **`mol-polecat-work` formula not found**: Use `--hook-raw-bead` flag on `gt sling`
+- **Polecat not following lifecycle**: Was it slung with `--hook-raw-bead`? That skips formula application. Re-sling through Mayor.
+- **Formula not resolving**: Mayor may not have finished rig bootstrap. Wait for Mayor boot to complete, or run `gt formula list` to verify formulas exist.
 - **ICU build error on beads install**: Use `CGO_ENABLED=0 go install ...`
 - **Polecat not showing in `gt agents list`**: Check tmux: `tmux list-sessions | grep gt-`
 - **Need Go but no sudo**: Install to `~/local/go/` instead of `/usr/local/`
+- **Polecat session frozen after work**: Claude Code sessions sometimes freeze post-completion. Check if work was committed, then kill the tmux session manually.
