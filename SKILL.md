@@ -82,7 +82,24 @@ The Mayor will:
 - Break the task into beads (work items)
 - Create a convoy to track them
 - Sling beads to polecats with the proper `mol-polecat-work` formula
+- **Send SWARM_START to Witness** for batch completion tracking
 - Monitor progress and handle coordination
+
+### Batch Work Notification (SWARM_START)
+
+When Mayor dispatches multiple beads as a batch, it **must** notify Witness so completion can be tracked:
+
+```bash
+gt mail send <rig>/witness -s "SWARM_START" -m '{"swarm_id": "batch-123", "beads": ["vt-abc", "vt-def", "vt-ghi"]}'
+```
+
+This triggers:
+1. Witness creates a swarm tracking wisp
+2. Witness monitors polecat completion each patrol cycle  
+3. When all polecats in the swarm complete → Witness sends `SWARM_COMPLETE` to Mayor
+4. Mayor can then dispatch dependent work
+
+**Without SWARM_START**, Mayor has no way to know when batch work completes. It will sit idle waiting for dependencies that nobody notifies it about.
 
 ### 2. Monitor progress
 
@@ -199,6 +216,7 @@ The formulas are installed at the town level (`~/gt/.beads/formulas/`), and `gt 
 
 ## Troubleshooting
 
+- **Mayor not dispatching dependent work after batch completes**: Mayor didn't send `SWARM_START` to Witness. Without it, Witness doesn't track completion and never sends `SWARM_COMPLETE` back to Mayor. Nudge Mayor to check convoy status and dispatch, or manually notify: `gt mail send mayor -s "Dependencies complete" -m "vt-abc and vt-def are done, please dispatch vt-ghi"`
 - **Polecat idle/frozen after initial work**: Likely slung without `mol-polecat-work` formula. Check if formulas symlink exists. Kill the polecat, verify symlink, and re-dispatch through Mayor.
 - **Formula not resolving**: Symlink missing. Run `cd ~/gt/<rig>/.beads && ln -s ../../.beads/formulas formulas`. Verify: `cd ~/gt/<rig> && bd cook mol-polecat-work --dry-run`.
 - **`gt mayor mail` doesn't exist**: Use `gt mail send mayor -s "subject" -m "message"` instead.
