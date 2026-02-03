@@ -35,6 +35,12 @@ cd ~/gt
 
 # Add a project as a rig
 gt rig add <name> <git-repo-or-local-path> --branch main
+
+# Link formulas so polecats get the mol-polecat-work lifecycle
+cd ~/gt/<name>/.beads && ln -s ../../.beads/formulas formulas
+
+# Fix any config issues
+gt doctor --fix
 ```
 
 ## Core Workflow — Work Through the Mayor
