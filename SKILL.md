@@ -134,10 +134,25 @@ The **Refinery** agent merges polecat branches back to main. You never push dire
 
 See `references/architecture.md` for full details on Mayor, Rigs, Polecats, Hooks, Convoys, Beads, Refinery, and Witness.
 
+## Formula Resolution (Important)
+
+Gastown has two tools that deal with formulas differently:
+
+- **`gt`** (orchestrator) searches 3 paths: `.beads/formulas/` (project), `~/.beads/formulas/` (user), `$GT_ROOT/.beads/formulas/` (town)
+- **`bd`** (issue tracker) only searches `.beads/formulas/` relative to the current project root
+
+When `gt sling` assigns work to a polecat, it calls `bd cook` to instantiate the `mol-polecat-work` formula. But `bd cook` runs in the rig's directory context (e.g., `~/gt/vtuber/`), so it only looks at `~/gt/vtuber/.beads/formulas/` — which doesn't exist by default for new rigs.
+
+The formulas are installed at the town level (`~/gt/.beads/formulas/`), and `gt formula list` finds them fine. But `gt sling` doesn't pass `--search-path` to `bd cook`, so `bd` can't find them.
+
+**The fix:** Symlink the town-level formulas into each rig during setup (included in the Setup section above). This makes the rig's `.beads/formulas/` resolve to the shared town formulas. This is the intended mechanism — rigs are designed to be self-contained, and the symlink opts them into the shared formula library.
+
+Without this symlink, `gt sling` will log a warning like `Could not cook formula mol-polecat-work` and fall back to raw bead mode (no 9-step lifecycle).
+
 ## Troubleshooting
 
 - **Polecat not following lifecycle**: Was it slung with `--hook-raw-bead`? That skips formula application. Re-sling through Mayor.
-- **Formula not resolving (`mol-polecat-work` not found)**: Rigs need access to formulas. Symlink the global formulas into the rig: `cd ~/gt/<rig>/.beads && ln -s ../../.beads/formulas formulas`. Verify with `cd ~/gt/<rig> && bd cook mol-polecat-work --dry-run`.
+- **Formula not resolving (`mol-polecat-work` not found)**: See "Formula Resolution" section above. Symlink the formulas: `cd ~/gt/<rig>/.beads && ln -s ../../.beads/formulas formulas`. Verify with `cd ~/gt/<rig> && bd cook mol-polecat-work --dry-run`.
 - **ICU build error on beads install**: Use `CGO_ENABLED=0 go install ...`
 - **Polecat not showing in `gt agents list`**: Check tmux: `tmux list-sessions | grep gt-`
 - **Need Go but no sudo**: Install to `~/local/go/` instead of `/usr/local/`
